@@ -1,0 +1,191 @@
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using WpfApp6.Models;
+
+namespace WpfApp6
+{
+    public partial class MainWindow : Window
+    {
+        private ShoeStoreDb2Context _db;
+        private List<Tovar> _allProducts;
+        private List<Tovar> _currentList;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+            _db = new ShoeStoreDb2Context();
+            LoadSuppliers();
+            LoadProducts();
+        }
+
+        private void LoadSuppliers()
+        {
+            try
+            {
+                var suppliers = _db.Tovars
+                    .Where(p => !string.IsNullOrEmpty(p.Поставщик))
+                    .Select(p => p.Поставщик)
+                    .Distinct()
+                    .ToList();
+
+                cbSupplier.Items.Clear();
+                cbSupplier.Items.Add("Все поставщики");
+                foreach (var supplier in suppliers)
+                {
+                    cbSupplier.Items.Add(supplier);
+                }
+                cbSupplier.SelectedIndex = 0;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка загрузки поставщиков: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void LoadProducts()
+        {
+            try
+            {
+                _allProducts = _db.Tovars.ToList();
+                _currentList = _allProducts;
+                listViewProducts.ItemsSource = _currentList;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка загрузки товаров: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void tbSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            try
+            {
+                if (_currentList == null) return;
+                string search = tbSearch.Text.ToLower().Trim();
+                if (string.IsNullOrEmpty(search))
+                {
+                    listViewProducts.ItemsSource = _currentList;
+                    return;
+                }
+                var found = _currentList.Where(p =>
+                    (p.Артикул != null && p.Артикул.ToLower().Contains(search)) ||
+                    (p.НаименованиеТовара != null && p.НаименованиеТовара.ToLower().Contains(search)) ||
+                    (p.КатегорияТовара != null && p.КатегорияТовара.ToLower().Contains(search)) ||
+                    (p.Производитель != null && p.Производитель.ToLower().Contains(search)) ||
+                    (p.Поставщик != null && p.Поставщик.ToLower().Contains(search))
+                ).ToList();
+                listViewProducts.ItemsSource = found;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка поиска: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void cbSupplier_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (cbSupplier.SelectedIndex > 0 && cbSupplier.SelectedItem != null)
+                {
+                    string supplier = cbSupplier.SelectedItem.ToString();
+                    _currentList = _allProducts.Where(p => p.Поставщик == supplier).ToList();
+                }
+                else
+                {
+                    _currentList = _allProducts;
+                }
+                listViewProducts.ItemsSource = _currentList;
+                tbSearch.Text = "";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка фильтрации: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void btnReset_Click(object sender, RoutedEventArgs e)
+        {
+            cbSupplier.SelectedIndex = 0;
+            tbSearch.Text = "";
+            _currentList = _allProducts;
+            listViewProducts.ItemsSource = _currentList;
+        }
+
+        private void btnAdd_Click(object sender, RoutedEventArgs e)
+        {
+            GlobalData.CurrentProduct = null;
+            AddEditWindow f = new AddEditWindow();
+            f.Owner = this;
+            f.ShowDialog();
+            LoadProducts();
+            LoadSuppliers();
+        }
+
+        private void btnEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (listViewProducts.SelectedItem != null)
+            {
+                GlobalData.CurrentProduct = (Tovar)listViewProducts.SelectedItem;
+                AddEditWindow f = new AddEditWindow();
+                f.Owner = this;
+                f.ShowDialog();
+                LoadProducts();
+                LoadSuppliers();
+            }
+            else
+            {
+                MessageBox.Show("Выберите товар для редактирования!", "Внимание",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void listViewProducts_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            btnEdit_Click(sender, null);
+        }
+
+        private void btnDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (listViewProducts.SelectedItem == null)
+            {
+                MessageBox.Show("Выберите товар для удаления!", "Внимание",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (MessageBox.Show("Удалить выбранный товар?", "Подтверждение",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    var product = (Tovar)listViewProducts.SelectedItem;
+                    _db.Tovars.Remove(product);
+                    _db.SaveChanges();
+                    LoadProducts();
+                    LoadSuppliers();
+                    MessageBox.Show("Товар удален!", "Успех",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void btnCancel_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
+        }
+    }
+}
